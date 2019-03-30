@@ -1,4 +1,7 @@
 # 如何配置集群Session复制
+
+> 更新时间：2019-03-22/23/24
+
 [原文](http://tomcat.apache.org/tomcat-9.0-doc/config/cluster.html)
 
 ### 目录
