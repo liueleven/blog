@@ -5,7 +5,7 @@
 [原文](http://tomcat.apache.org/tomcat-9.0-doc/cluster-howto.html)
 
 ### 概述
-- 对于不耐烦的人
+- 对于没有耐心的人
 - 安全
 - 集群基础
 - 预览
@@ -17,7 +17,7 @@
 - 使用JMX监控你的集群
 - 常见问题解答
 
-### 对于不耐烦的人
+### 对于没有耐心的人
 在你的<Engine>或你的<Host>元素中添加`<Cluster className="org.apache.catalina.ha.tcp.SimpleTcpCluster"/>`来开启集群
 
 使用上述配置将启用session复制通过DeltaManager复制会话。也就是说，每个会话都会复制到集群中的每一个节点上。这对于较小的集群非常有用，但是我们不推荐用于较大的集群（超过4个节点左右）当使用DeltaManager，Tomcat会复制session到每个节点，即使该节点没有部署应用。
