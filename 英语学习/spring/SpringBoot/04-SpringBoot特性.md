@@ -1677,4 +1677,371 @@ spring.webflux.static-path-pattern=/resources/**
 ---
 2019-03-31 
 
-### 29.2.4 Template Engines
+### 29.2.4 模板引擎
+
+和REST服务一样，你也可以使用Spring WebFlux提供动态HTML内容服务。Spring WebFlux支持多种模版技术，包括Thymeleaf，FreeMarker和Mustache。
+
+SpringBoot为以下模版引擎自动装配提供支持：
+- [FreeMarker](https://freemarker.apache.org/docs/)
+- [Thymeleaf](http://www.thymeleaf.org/)
+- [Mustache](https://mustache.github.io/)
+
+当你使用其中一种模版引擎配置时，会自动从src/main/resources/templates路径下获取模版页面
+
+### 29.2.5  异常处理
+
+SpringBoot提供了WebExceptionHandler用一种合理的方法来处理所有的异常。它处理的顺序位置在WebFlux之前，最后才会考虑WebFlux。为机器客户端，生成一个JSON来响应错误的细节，HTTP状态码和异常信息。为浏览器客户端，则是一个“空白标签”同样的数据以HTML的格式展现。你也可以提供你自己的HTML模版来显示错误信息（查看[下一小节](https://docs.spring.io/spring-boot/docs/2.1.3.RELEASE/reference/htmlsingle/#boot-features-webflux-error-handling-custom-error-pages)）
+
+定制此特性的第一步通常涉及使用现有机制，替换或扩充错误内容。为此，您可以添加一个类型为ErrorAttributes的bean。
+
+改变异常处理行为，你可以实现ErrorWebExceptionHandler为该类型注册一个bean。因为WebExceptionHandler级别很低，所以Spring Boot还提供了一个方便的AbstractErrorWebExceptionHandler，让您以WebFlux功能方式处理错误，如下所示:
+```
+public class CustomErrorWebExceptionHandler extends AbstractErrorWebExceptionHandler {
+
+	// Define constructor here
+
+	@Override
+	protected RouterFunction<ServerResponse> getRoutingFunction(ErrorAttributes errorAttributes) {
+
+		return RouterFunctions
+				.route(aPredicate, aHandler)
+				.andRoute(anotherPredicate, anotherHandler);
+	}
+
+}
+```
+For a more complete picture, you can also subclass DefaultErrorWebExceptionHandler directly and override specific methods.
+
+### 自定义异常页面
+如果你想为给定的状态显示自定义的异常页面，你可以将文件添加到/error文件夹下。错误页面可以是静态HTML（添加到任何静态资源文件夹下）或者是编译过的模版。文件的名称应该是确切的状态码或一系列的掩码。
+
+例如，映射到404静态HTML文件，你的文件目录结构应该 如下：
+```
+src/
+ +- main/
+     +- java/
+     |   + <source code>
+     +- resources/
+         +- public/
+             +- error/
+             |   +- 404.html
+             +- <other public assets>
+```
+通过胡子模板页面来映射所有5xx类的异常，你的文件目录结构如下：
+```
+src/
+ +- main/
+     +- java/
+     |   + <source code>
+     +- resources/
+         +- templates/
+             +- error/
+             |   +- 5xx.mustache
+             +- <other templates>
+```
+### 29.2.6 Web过滤器
+Spring WebFliter提供了WebFilter过滤器，可以实现对HTTPrequest和response交互请求的过滤。在应用上下文中找到WebFilter bean会自动过滤每个请求交互。
+
+如果过滤的顺序很重要，他们可以是实现Ordered或者使用@Order注解。SpringBoot的自动装配可以为你配置web过滤器，当它这样做时，排序如下所示：
+
+| Web Filter                            | Order                          |
+| ------------------------------------- | ------------------------------ |
+| MetricsWebFilter                      | Ordered.HIGHEST_PRECEDENCE + 1 |
+| WebFilterChainProxy (Spring Security) | -100                           |
+| HttpTraceWebFilter                    | Ordered.LOWEST_PRECEDENCE - 10 |
+
+
+### 29.3 JAX-RS 和 Jersey
+如果您更喜欢针对REST端点的JAX-RS编程模型，你可以使用一个可用的实现来代替Spring MVC，[Jersey](https://jersey.github.io/)和 [Apache CXF](https://cxf.apache.org/)开箱即用运行良好。CXF 需要你在应用上下中注册一个Servlet或Filter的@Bean。Jersey支持Spring，所以我们也为SpringBoot提供了自动装配，还有相应的starter。
+
+要开始使用Jersey，要开始使用Jersey，请将spring-boot-starter-jersey作为一个依赖项，然后需要一个ResourceConfig类型的@Bean，在其中注册所有端点，如下例所示:
+```
+@Component
+public class JerseyConfig extends ResourceConfig {
+
+	public JerseyConfig() {
+		register(Endpoint.class);
+	}
+
+}
+```
+> Jersey's 对扫描可执行文件的支持相当有限。例如，当运行可执行war文件时，它无法扫描在完全可执行jar文件或WEB - INF/类中找到的包中的端点。为了避免这种限制，不应该使用packages方法，应该使用register方法单独注册端点，如前面的示例所示。
+
+对于更高级的自定义，你也可以实现ResourceConfigCustomizer来注册任意数量的bean。
+
+所有注册的断点都应该使用带HTTP资源的注解@Components(@GET和其它)，如下所示：
+```
+@Component
+@Path("/hello")
+public class Endpoint {
+
+	@GET
+	public String message() {
+		return "Hello";
+	}
+
+}
+
+```
+
+由于端点被Spring @Component标记，因此它的生命周期由Spring管理，您可以使用@Autowired注释来注入依赖项，并使用@Value注释来注入外部配置。默认情况下，Jersey Servlet被注册并映射到/*。您可以通过将@ApplicationPath添加到ResourceConfig中来更改映射。
+
+默认情况下，Jersey is set up as a Servlet in a @Bean of type ServletRegistrationBean named jerseyServletRegistration.默认情况下，这个servlet的初始化是懒加载的。但是你可以通过spring.jersey.servlet.load-on-startup来自定义设置。你可以创建一个名称一样的bean来禁用或覆盖它。你也可以通过设置spring.jersey.type=filter使用过滤器来代替servlet（这种情况下，这个@Bean会代替或覆盖jerseyFilterRegistration）。过滤器有一个@Order注解，你可以设置spring.jersey.filter.order。servlet和过滤器注册都可以通过使用spring.jersey.init.*来指定属性映射来给定init参数。
+
+这里有一个[Jersey例子](https://github.com/spring-projects/spring-boot/tree/v2.1.3.RELEASE/spring-boot-samples/spring-boot-sample-jersey)，这样你就可以看到如何设置。
+
+---
+2019-04-02
+### 29.4 支持内嵌tomcat
+SpringBoot支持内嵌容器包括Tomcat，Jetty和Undertow服务。大多数开发人员使用合适的“Starter”来获得完全配置的实例。默认情况下，内嵌服务器监听HTTP请求8080端口。
+
+> 如果你选择在CentOS上使用Tomcat，请注意，默认情况下，临时目录用于存储编译后的Jsp，上传的文件等等。当你的应用运行时这个tmpwatch会删除此目录，从而导致失败。为了避免这种行为，您可能需要自定义tmpwatch配置，以便tomcat.*目录不会被删除，也不会配置server.tomcat.basedir，以便嵌入式tomcat使用不同的位置。
+
+#### 29.4.1 Servlet，过滤器和监听器
+当你使用内嵌式Servlet容器，你可以通过Spring beans或者扫描Servlet组件的方式来注册Servlet，过滤器和所有监听器（例如HttpSessionListener）
+
+#### 将Servlets、过滤器和侦听器注册为Spring Beans
+
+任何`Servlet`、`Filter`或servlet `*Listener`实例都是作为一个Spring bean在嵌入式容器中注册的。如果你想在配置期间引用application.properties中的值，这可能特别方便。
+
+默认情况下，如果上下文只包含一个Servlet，它将被映射到/。在多个servlet beans的情况下，bean名称被用作路径前缀。过滤器映射到/*。
+
+如果基于约定的映射不够灵活，可以使用ServletRegistrationBean、FilterRegistrationBean和ServletListenerRegistrationbean类来实现完全控制。
+
+SpringBoot上有许多可以定义过滤器bean的自动配置。以下是过滤器及其各自顺序的一些示例(较低的顺序值意味着较高的优先级):
+
+| Servlet Filter                 | Order                          |
+| ------------------------------ | ------------------------------ |
+| OrderedCharacterEncodingFilter | Ordered.HIGHEST_PRECEDENCE     |
+| WebMvcMetricsFilter            | Ordered.HIGHEST_PRECEDENCE + 1 |
+| ErrorPageFilter                | Ordered.HIGHEST_PRECEDENCE + 1 |
+| HttpTraceFilter                | Ordered.LOWEST_PRECEDENCE - 10 |
+
+让过滤器的bean无序通常是安全的
+
+如果要指定顺序，你应该避免配置一个过滤器，该过滤器在Request body中读取Ordered.HIGHEST_PRECEDENCE,因为这可能与应用程序的字符编码配置背道而驰。如果一个Servlet过滤器包装了request，应该用小于或等于OrderedFilter.REQUEST_WRAPPER_FILTER_MAX_ORDER.的顺序配置它
+
+---
+2019-04-03
+
+### 29.4.2 Servlet 上下文初始化
+内嵌式Servlet 容器不直接执行Servlet3.0+`javax.servlet.ServletContainerInitializer`接口或者Spring `org.springframework.web.WebApplicationInitializer`接口。这是一个有意的设计，为了降低在war包中运行的第三方库可能破坏SpringBoot应用程序的风险。
+
+如果你需要在SpringBoot中执行Servlet上下文初始化，你可以实现org.springframework.boot.web.servlet.ServletContextInitializer接口来注册这个bean。单个`onStartup`方法提供了对ServletContext的访问，如果需要，可以很容易使用现有WebApplicationInitializer的适配器。
+
+#### 扫描Servlets, Filters, 和listeners
+
+当使用嵌入式容器时，可以通过使用@ServletComponentScan来启用@WebServlet、@WebFilter和@WebListener注释的类的自动注册。
+
+> @ServletComponentScan在独立容器中不起作用，而是使用容器的内置发现机制。
+
+### 29.4.3 ServletWebServerApplicationContext
+
+在后台，SpringBoot使用不同类型的应用上下文来支持内嵌的Servlet容器。ServletWebServerapplicationContext是一种特殊类型的WebApplicationContext，它通过搜索单个ServletWebServerFactory bean来引导自己。通常，已经自动配置了一个TomcatServletWebServerFactory、JettyServletWebServerFactory或UndertowServletWebServerFactory。
+
+### 29.4.4 自定义内嵌式Servlet容器
+Servlet容器通用配置可以使用Spring属性Environment进行配置。通常，你会在你的application.properties文件定义这个属性
+
+通用服务设置包含：
+- 网络设置：监听HTTP请求端口（server.port)，接口地址绑定到server.address上等等。
+- session设置：session持久化（server.servlet.session.persistence)，session超时(server.servlet.session.timeout)本地session数据(server.servlet.session.store-dir)还有session-cookie配置(server.servlet.session.cookie.*).
+- 异常管理：错误页面路径 (server.error.path)等等
+- [SSL](https://docs.spring.io/spring-boot/docs/2.1.3.RELEASE/reference/htmlsingle/#howto-configure-ssl)
+- [HTTP 压缩](https://docs.spring.io/spring-boot/docs/2.1.3.RELEASE/reference/htmlsingle/#how-to-enable-http-response-compression)
+
+SpringBoot尽可能的暴露通用设置，但是这并不总是可能的。专用命名空间提供特定于服务器的定制（比如server.tomcat 和server.undertow）。例如，[访问日志](https://docs.spring.io/spring-boot/docs/2.1.3.RELEASE/reference/htmlsingle/#howto-configure-accesslogs)可以配置嵌入式servlet容器的特定功能。
+
+> 在[ServerProperties](https://github.com/spring-projects/spring-boot/tree/v2.1.3.RELEASE/spring-boot-project/spring-boot-autoconfigure/src/main/java/org/springframework/boot/autoconfigure/web/ServerProperties.java)类中查看完整属性列表
+
+#### 代码中自定义
+如果你想在代码中配置嵌入式Servlet容器，你可以注册一个Spring bean实现WebServerFactoryCustomizer接口。WebServerFactoryCustomizer提供可以访问到ConfigurableServletWebServerFactory，中包括许多定制设置方法。以下例子展示类如何在代码中配置端口
+```
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
+import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
+import org.springframework.stereotype.Component;
+
+@Component
+public class CustomizationBean implements WebServerFactoryCustomizer<ConfigurableServletWebServerFactory> {
+
+	@Override
+	public void customize(ConfigurableServletWebServerFactory server) {
+		server.setPort(9000);
+	}
+
+}
+```
+> TomcatServletWebServerFactory, JettyServletWebServerFactory 和 UndertowServletWebServerFactory 是ConfigurableServletWebServerFactory的变形，他们可以为Tomcat, Jetty 和 Undertow respectively分别添加自定义配置方法
+
+---
+2019-04-05
+#### 直接自定义ConfigurableServletWebServerFactory
+如果签名自定义的操作有限，你可以自己注册TomcatServletWebServerFactory, JettyServletWebServerFactory或者UndertowServletWebServerFactory
+```
+@Bean
+public ConfigurableServletWebServerFactory webServerFactory() {
+	TomcatServletWebServerFactory factory = new TomcatServletWebServerFactory();
+	factory.setPort(9000);
+	factory.setSessionTimeout(10, TimeUnit.MINUTES);
+	factory.addErrorPages(new ErrorPage(HttpStatus.NOT_FOUND, "/notfound.html"));
+	return factory;
+}
+```
+设置器提供了许多配置选项。如果您需要做一些更奇特的事情，还提供了几个受保护的方法“钩子”。更多细节查看[文档](https://docs.spring.io/spring-boot/docs/2.1.3.RELEASE/api/org/springframework/boot/web/servlet/server/ConfigurableServletWebServerFactory.html)
+
+### 29.4.5 JSP有限性
+当SpringBoot使用内嵌的Servlet容器运行时（已经打包成可执行的档案）对JSP支持是有限的
+- 在Jetty和Tomcat中使用war包是可以工作的。当使用java -jar命令war包将会工作，并且也可以部署到任何独立的容器中。当使用一个可执行jar包时是不支持jsp的
+- Undertow不支持JSP
+- 创建自定义的error.jsp页面不会覆盖默认[异常处理](https://docs.spring.io/spring-boot/docs/2.1.3.RELEASE/reference/htmlsingle/#boot-features-error-handling)页面，[自定义异常页面](https://docs.spring.io/spring-boot/docs/2.1.3.RELEASE/reference/htmlsingle/#boot-features-error-handling-custom-error-pages)会被替换
+
+这里有一个[JSP例子](https://github.com/spring-projects/spring-boot/tree/v2.1.3.RELEASE/spring-boot-samples/spring-boot-sample-web-jsp)，方便你如何查看如何使用
+
+### 29.5 支持嵌入式响应式服务
+SpringBoot包括对以下嵌入式响应式web服务器的支持：响应式Netty，Tomcat，Jetty和Undertow。大多数开发人员使用适当的starter来获取完全配置的实例。默认情况下，嵌入式服务器监听端口8080上的HTTP请求
+
+### 29.6 配置响应式资源服务
+当自动配置响应式Netty或Jetty服务器时，SpringBoot将创建特定的beans：ReactorResourceFactory 或 JettyResourceFactory.为服务器实例提供HTTP资源。
+
+默认情况下，这些资源也将与响应式Netty和Jetty客户端共享，以获得最佳性能，前提是:
+- 服务器和客户端使用相同的技术
+- 客户端实例通过SpringBoot使用WebClient.Builder bean自动装配的
+
+开发人员可以通过提供一个定制的ReactorResourceFactory或JettyResourceFactory bean来覆盖Jetty和响应式Netty的资源配置，这将应用于客户端和服务器。
+
+你可以在[WebClient Runtime section](https://docs.spring.io/spring-boot/docs/2.1.3.RELEASE/reference/htmlsingle/#boot-features-webclient-runtime)上学习更多的资源配置
+
+---
+2019-04-06
+### 30. 安全
+如果Sprint Security在类路径上，那么Web应用默认是安全的。SpringBoot依靠Spring Security内容协商策略来决定使用httpBasic还是formLogin。为Web应用添加方法等级安全，你可以在你需要的配置上使用@EnableGlobalMethodSecurity。更多信息可以查看[Spring Security参考指南](https://docs.spring.io/spring-security/site/docs/5.1.4.RELEASE/reference/htmlsingle#jc-method)
+
+UserDetailsService默认有一个用户，这个用户的名称就是user，密码是随机的，当应用程序启动时会在INFO等级中打印，如下所示：
+```
+Using generated security password: 78fa095d-3f4c-48b1-ad50-e24c31d5cf35
+```
+> 如果你要调整日志配置，确保org.springframework.boot.autoconfigure.security 设置了INFO级别的日志信息，否则，默认的密码是不会打印出来的
+
+你可以通过spring.security.user.name和 spring.security.user.password来修改用户名和密码
+
+默认清空下，Web应用有一下基本特征：
+- 一个UserDetailsService（在WebFlux中是ReactiveUserDetailsService）bean将单个用户和密码存储在内存中（用户属性文件中查看[SecurityProperties.User](https://docs.spring.io/spring-boot/docs/2.1.3.RELEASE/api/org/springframework/boot/autoconfigure/security/SecurityProperties.User.html)）
+- 整个应用程序(包括执行器在类路径上的执行器端点)的基于表单的登录或HTTP基本安全性(取决于ContentType)。
+- DefaultAuthenticationEventPublisher用于发布授权事件
+
+您可以通过为其添加bean来提供不同的AuthenticationEventPublisher。
+
+30.1 MVC 安全
+默认安全配置实现SecurityAutoConfiguration和 UserDetailsServiceAutoConfiguration。SecurityAutoConfiguration为Web安全导入了SpringBootWebSecurityConfiguration和UserDetailsServiceAutoConfiguration授权配置，这也与非网络应用相关。要完全关闭默认的网络应用程序安全配置，你需要加一个WebSecurityConfigurerAdapter类型的bean（这样做不会禁用UserDetailsService配置或Actuator安全）
+
+要关闭 UserDetailsService配置，你可以添加UserDetailsService, AuthenticationProvider, 或AuthenticationManager类型的bean。SpringBoot有几个安全应用示例中可以让你快速使用。
+
+可以添加WebSecurityConfigurerAdapter来覆盖默认的访问规则。SpringBoot提供了便捷的方法，可用于覆盖Actuator端点和静态资源的访问规则。EndpointRequest基于management.endpoints.web.base-path 属性可以创建RequestMatcher。PathRequest可以为通用资源创建一个RequestMatcher。
+
+### 30.2 WebFlux 安全
+与Spring MVC应用程序类似，你可以添加spring-boot-starter-security依赖来保证WebFlux应用的安全性。默认的安全配置实现了ReactiveSecurityAutoConfiguration和 UserDetailsServiceAutoConfiguration。ReactiveSecurityAutoConfiguration为Web安全导入了WebFluxSecurityConfiguration并且用UserDetailsServiceAutoConfiguration配置权限，这也与非网络应用相关。要完全关闭默认的网络应用程序安全配置，你需要添加一个WebFilterChainProxy类型的bean（这样做不会禁用UserDetailsService 配置或Actuator安全）
+
+要关闭 UserDetailsService配置，你可以添加ReactiveUserDetailsService 或ReactiveAuthenticationManager类型的bean。
+
+
+可以添加SecurityWebFilterChain来覆盖默认的访问规则。SpringBoot提供了便捷的方法，可用于覆盖Actuator端点和静态资源的访问规则。EndpointRequest基于management.endpoints.web.base-path属性可以创建ServerWebExchangeMatcher。
+
+PathRequest可以为通用资源创建一个ServerWebExchangeMatcher。
+
+例如，您可以通过添加以下内容自定义安全配置:
+```
+@Bean
+public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
+	return http
+		.authorizeExchange()
+			.matchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
+			.pathMatchers("/foo", "/bar")
+				.authenticated().and()
+			.formLogin().and()
+		.build();
+}
+```
+---
+2019-05-07
+
+### 30.3 OAuth2
+OAuth2是一种被广泛用于授权的框架，Spring支持使用
+
+#### 30.3.1 客户端
+如果你的类路径上有spring-security-oauth2-client ，你可以利用某些自动装配让OAuth2/Open ID连接客户端变得更方便。
+
+你可以注册多个OAuth2客户端并且提供以下前缀：spring.security.oauth2.client，如下所示：
+```
+spring.security.oauth2.client.registration.my-client-1.client-id=abcd
+spring.security.oauth2.client.registration.my-client-1.client-secret=password
+spring.security.oauth2.client.registration.my-client-1.client-name=Client for user scope
+spring.security.oauth2.client.registration.my-client-1.provider=my-oauth-provider
+spring.security.oauth2.client.registration.my-client-1.scope=user
+spring.security.oauth2.client.registration.my-client-1.redirect-uri-template=http://my-redirect-uri.com
+spring.security.oauth2.client.registration.my-client-1.client-authentication-method=basic
+spring.security.oauth2.client.registration.my-client-1.authorization-grant-type=authorization_code
+
+spring.security.oauth2.client.registration.my-client-2.client-id=abcd
+spring.security.oauth2.client.registration.my-client-2.client-secret=password
+spring.security.oauth2.client.registration.my-client-2.client-name=Client for email scope
+spring.security.oauth2.client.registration.my-client-2.provider=my-oauth-provider
+spring.security.oauth2.client.registration.my-client-2.scope=email
+spring.security.oauth2.client.registration.my-client-2.redirect-uri-template=http://my-redirect-uri.com
+spring.security.oauth2.client.registration.my-client-2.client-authentication-method=basic
+spring.security.oauth2.client.registration.my-client-2.authorization-grant-type=authorization_code
+
+spring.security.oauth2.client.provider.my-oauth-provider.authorization-uri=http://my-auth-server/oauth/authorize
+spring.security.oauth2.client.provider.my-oauth-provider.token-uri=http://my-auth-server/oauth/token
+spring.security.oauth2.client.provider.my-oauth-provider.user-info-uri=http://my-auth-server/userinfo
+spring.security.oauth2.client.provider.my-oauth-provider.user-info-authentication-method=header
+spring.security.oauth2.client.provider.my-oauth-provider.jwk-set-uri=http://my-auth-server/token_keys
+spring.security.oauth2.client.provider.my-oauth-provider.user-name-attribute=name
+```
+对于支持OpenID连接发现的OpenID连接提供商来说，配置可以进一步的简化。提供商需要配置一个issuer-uri，这个URI声明为颁发者标识符。例如，如果issuser-uri提供的是 "https://example.com", 那么OpenID Provider Configuration Request将会变成"https://example.com/.well-known/openid-configuration"。期待返回的结果是一个OpenID Provider Configuration Response。下面示例展示了如何用issuer-uri配置一个OpenId连接提供者：
+```
+spring.security.oauth2.client.provider.oidc-provider.issuer-uri=https://dev-123456.oktapreview.com/oauth2/default/
+```
+默认情况下, Spring Security’s OAuth2LoginAuthenticationFilter 只能匹配到 /login/oauth2/code/*。如果你想对不同的设计自定义redirect-uri，你需要提供配置来处理自定义设计。例如，对于Servlet应用来说，你可以添加你自己的WebSecurityConfigurerAdapter，类似于下面这种：
+```
+public class OAuth2LoginSecurityConfig extends WebSecurityConfigurerAdapter {
+
+	@Override
+	protected void configure(HttpSecurity http) throws Exception {
+		http
+			.authorizeRequests()
+				.anyRequest().authenticated()
+				.and()
+			.oauth2Login()
+				.redirectionEndpoint()
+					.baseUri("/custom-callback");
+	}
+}
+```
+#### 面向公共提供商的OAuth2客户端注册
+对于常见的OAuth2和OpenID提供商，包括Google, Github, Facebook, 和 Okta,我们提供一个默认的值（分别是google, github, facebook, 和 okta）
+
+如果你不需要自定义这些提供商，你可以把provider属性设置为你需要的默认值。此外，如果客户端注册的密钥与默认支持的提供商匹配，SpringBoot也会推断出来。
+
+换句话说，下面两个配置使用的是Googele提供商：
+```
+spring.security.oauth2.client.registration.my-client.client-id=abcd
+spring.security.oauth2.client.registration.my-client.client-secret=password
+spring.security.oauth2.client.registration.my-client.provider=google
+
+spring.security.oauth2.client.registration.google.client-id=abcd
+spring.security.oauth2.client.registration.google.client-secret=password
+```
+
+#### 30.3.2 资源服务
+如果你的类路径上有spring-security-oauth2-resource-server ，只要JWK设置了URI或者OIDC指定了URI，SpringBoot可以设置一个OAuth2资源服务，如下所示：
+```
+spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://example.com/oauth2/default/v1/keys
+```
+```
+spring.security.oauth2.resourceserver.jwt.issuer-uri=https://dev-123456.oktapreview.com/oauth2/default/
+```
+相同的属性适用于servlet和反应性应用程序。
+
+或者，你可以为你的Servlet应用定义你一个的JwtDecoder bean或为是一个响应式应用定义一个ReactiveJwtDecoder
+
+#### 30.3.3授权服务
+目前，Spring Security没有为OAuth 2.0 授权服务提供实现支持。然而，该功能可从[Spring Security OAuth](https://projects.spring.io/spring-security-oauth/)项目中获得，最终将被Spring Security完全取代。在此之前，您可以使用spring-security-OAuth 2-自动配置模块轻松设置OAuth 2.0授权服务器；有关说明，请参见其[文档](https://docs.spring.io/spring-security-oauth2-boot)。
