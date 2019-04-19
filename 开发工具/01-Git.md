@@ -119,11 +119,11 @@ git push origin     //再把master合并dev后的代码推送到远程端（这�
 将github仓库复制到gitlab
 ```
 // 将oldProject.git文件夹复制到本地
-git clone –mirror git@gitlab.com:Daily-nxt/oldProject.git
+git clone –-mirror git@gitlab.com:Daily-nxt/oldProject.git
 // 进入这个文件夹oldProject.git
 cd oldProject.git
 // 设置需要迁移的目标路径
-git remote set-url - -push origin git@gitlab.com:Daily-nxt/oldProject.git
+git remote set-url -push origin git@gitlab.com:Daily-nxt/oldProject.git
 // 推送到远程
 git push --mirror
 ```
