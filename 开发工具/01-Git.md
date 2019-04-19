@@ -123,7 +123,7 @@ git clone –mirror git@gitlab.com:Daily-nxt/oldProject.git
 // 进入这个文件夹oldProject.git
 cd oldProject.git
 // 设置需要迁移的目标路径
-git remote set-url --push origin git@gitlab.com:Daily-nxt/oldProject.git
+git remote set-url - -push origin git@gitlab.com:Daily-nxt/oldProject.git
 // 推送到远程
 git push --mirror
 ```
